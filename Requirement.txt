@@ -1,0 +1,58 @@
+Architecture RFC: Distributed, High-Precision Event-Driven Scheduler
+
+1. Executive Summary & Problem Statement
+
+Modern enterprise architectures struggle with execution accuracy when a business requirement
+demands exactly-once execution guarantees at scale with millisecond precision (e.g., executing
+a high-frequency financial trade or system webhook at exactly 12:00:00.005).
+
+Standard open-source workers (like Celery, BullMQ, or Quartz) offload their state management to
+relational databases or caching layers, shifting the bottleneck to network I/O. Relational
+systems suffer from row-locking contention, while distributed queues introduce visibility
+timeouts that cause duplicate processing during network partitions.
+
+The Mission: Build an autonomous, low-overhead, distributed task scheduling engine from scratch
+in Java (Spring Boot). To maximize performance and demonstrate core systems-engineering depth,
+you will bypass external middleware infrastructure entirely (no Kafka, Redis, or external
+RDBMS). The application must natively handle thread safety, durability, sub-millisecond
+sorting, and high-concurrency ingestion using only local file streams and custom memory
+primitives.
+
+2. Core Functional Requirements (FR)
+
+- In-Memory Time-Partitioned Priority Indexing: System must support task ingestion with
+  arbitrary future execution timestamps (ranging from +50ms to +1 year). Ingestion must
+  execute with O(log n) efficiency.
+
+- High-Precision Non-Blocking Ticking: The execution thread must operate on a micro-tick
+  sequence (e.g., every 1-10 milliseconds). It must evaluate ready-state tasks with O(1)
+  efficiency via non-blocking peek operations.
+
+- Zero-Loss Crash Resilience: If the JVM process crashes or receives a kill -9 signal
+  mid-execution, the scheduler must rebuild its precise memory index state sequentially
+  upon boot up.
+
+- Deterministic Cluster Simulation: The engine must support deterministic state transitions
+  (Leader/Follower). When a node loses its leader status, its execution ticking must halt
+  instantaneously, but its ingestion API can remain active (queueing or proxying data).
+
+- In-Memory Concurrency Management: The engine must handle thousands of concurrent client
+  submission requests across multiple threads without hitting race conditions, deadlocks,
+  or thread starvation.
+
+3. Non-Functional Requirements (NFR)
+
+- Zero External Dependencies: No Docker containers, no external infrastructure processes.
+  The entire architecture must run seamlessly out of a standard git clone using local disk
+  directories (./storage/) inside the repository.
+
+- Execution Jitter Bound: Under a baseline workload, the execution time delta (Actual
+  Trigger Time - Target Scheduled Time) must remain within a < 15ms boundary.
+
+- Memory Efficiency & Scalability: The system must gracefully scale to handle 1,000,000+
+  scheduled events in the memory pool simultaneously without exceeding a standard JVM heap
+  ceiling or triggering continuous Stop-The-World Garbage Collection (STW GC) cycles.
+
+- LSM-Style Append-Only Write Performance: Disc writes must prioritize sequential I/O over
+  random writes. Random mutation of files is strictly prohibited; all state mutations must
+  be represented via append-only logs.

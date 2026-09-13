@@ -1,0 +1,14 @@
+target/
+*.class
+*.log
+
+.idea/
+*.iml
+.vscode/
+
+.DS_Store
+
+# Actual scheduler data must never be committed; only the directory itself
+# (via storage/.gitkeep) is tracked.
+storage/*
+!storage/.gitkeep
